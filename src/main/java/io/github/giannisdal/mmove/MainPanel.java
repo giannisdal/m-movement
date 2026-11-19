@@ -30,7 +30,7 @@ final class MainPanel extends JPanel {
 
     MainPanel(BufferedImage logo) {
         super(null);
-        this.logo = logo;
+        this.logo = AppIcon.scaled(logo, 192);
         setPreferredSize(new Dimension(360, 490));
 
         addSlider(new Slider(1, 400, MMove.distance(), MMove::updateDistance), DISTANCE_Y);
