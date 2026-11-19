@@ -6,7 +6,6 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.io.Serial;
 import javax.swing.JPanel;
 
 import static io.github.giannisdal.mmove.UiStyle.FONT;
@@ -14,7 +13,6 @@ import static io.github.giannisdal.mmove.UiStyle.createGraphics;
 import static io.github.giannisdal.mmove.UiStyle.drawCenteredText;
 
 final class MainPanel extends JPanel {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     private static final int CARD_X = 24;
@@ -32,7 +30,7 @@ final class MainPanel extends JPanel {
 
     MainPanel(BufferedImage logo) {
         super(null);
-        this.logo = logo;
+        this.logo = AppIcon.scaled(logo, 192);
         setPreferredSize(new Dimension(360, 490));
 
         addSlider(new Slider(1, 400, MMove.distance(), MMove::updateDistance), DISTANCE_Y);

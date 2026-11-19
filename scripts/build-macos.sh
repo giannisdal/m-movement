@@ -2,7 +2,7 @@
 set -eu
 
 if [ "$(uname -s)" != Darwin ]; then
-    echo "Build mMove.app on macOS with JDK 22 or newer." >&2
+    echo "Build mMove.app on macOS with JDK 11 or newer." >&2
     exit 1
 fi
 
@@ -16,7 +16,7 @@ trap 'rm -rf "$work_dir"' EXIT
 mkdir -p "$work_dir/input"
 
 main_class=io.github.giannisdal.mmove.MMove
-javac --release 22 -Xlint:all -Werror --source-path src/main/java -d "$work_dir/classes" \
+javac --release 11 -Xlint:all -Werror --source-path src/main/java -d "$work_dir/classes" \
     src/main/java/io/github/giannisdal/mmove/MMove.java
 jar cfm "$work_dir/input/mmove.jar" manifest.txt -C "$work_dir/classes" . assets/logo.png
 java -Djava.awt.headless=true -cp "$work_dir/input/mmove.jar" \
