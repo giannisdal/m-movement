@@ -40,8 +40,8 @@ public class MMove {
 
     public static void main(String[] args) {
         if (!claimSingleInstance()) return;
-        if (args.length > 0) pixels = Math.clamp(Integer.parseInt(args[0]), 1, 400);
-        if (args.length > 1) interval = Math.clamp(Integer.parseInt(args[1]), 1, 120);
+        if (args.length > 0) pixels = Math.max(1, Math.min(400, Integer.parseInt(args[0])));
+        if (args.length > 1) interval = Math.max(1, Math.min(120, Integer.parseInt(args[1])));
         SwingUtilities.invokeLater(MMove::buildUi);
     }
 
@@ -53,7 +53,7 @@ public class MMove {
             listener.setDaemon(true);
             listener.start();
             return true;
-        } catch (IOException _) {
+        } catch (IOException ignored) {
             requestExistingWindowFocus();
             return false;
         }
@@ -65,7 +65,7 @@ public class MMove {
                 listener.accept().close();
                 SwingUtilities.invokeLater(MMove::focusWindow);
             }
-        } catch (IOException _) {
+        } catch (IOException ignored) {
             // The listener has closed.
         }
     }
@@ -73,7 +73,7 @@ public class MMove {
     private static void requestExistingWindowFocus() {
         try {
             new Socket(InetAddress.getLoopbackAddress(), 47653).close();
-        } catch (IOException _) {
+        } catch (IOException ignored) {
             // The existing instance may have already exited.
         }
     }
@@ -153,7 +153,7 @@ public class MMove {
                     root.repaint();
                 }
             });
-        } catch (Exception _) {
+        } catch (Exception ignored) {
             // Leave the schedule active so the next move can retry if Robot is unavailable.
         }
     }
@@ -165,7 +165,7 @@ public class MMove {
     }
 
     private static void smoothMove(Robot robot, int startX, int endX, int y) {
-        int steps = Math.clamp(Math.abs(endX - startX), 1, 50);
+        int steps = Math.max(1, Math.min(50, Math.abs(endX - startX)));
         for (int step = 1; step <= steps; step++) {
             robot.mouseMove(startX + (endX - startX) * step / steps, y);
             robot.delay(10);

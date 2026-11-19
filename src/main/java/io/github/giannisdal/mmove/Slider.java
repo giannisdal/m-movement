@@ -7,7 +7,6 @@ import java.awt.Cursor;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.event.MouseEvent;
-import java.io.Serial;
 import java.util.function.IntConsumer;
 import javax.swing.JComponent;
 
@@ -16,7 +15,6 @@ import static io.github.giannisdal.mmove.UiStyle.createGraphics;
 
 /** Flat custom slider. */
 final class Slider extends JComponent {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     private static final int TRACK_PADDING = 10;
@@ -50,7 +48,7 @@ final class Slider extends JComponent {
 
     private void updateValue(int mouseX) {
         double fraction = (mouseX - TRACK_PADDING) / (double) trackWidth();
-        value = Math.clamp(Math.round(min + fraction * (max - min)), min, max);
+        value = Math.max(min, Math.min(max, (int) Math.round(min + fraction * (max - min))));
         onChange.accept(value);
         repaint();
     }

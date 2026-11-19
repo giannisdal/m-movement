@@ -34,7 +34,7 @@ If you have a packaged build, extract the entire archive and double-click `mMove
 
 ### Run from source
 
-With JDK 22 or later, run this command **from the project directory** so Java can find the logo in `assets/`.
+With JDK 11 or later, run this command **from the project directory** so Java can find the logo in `assets/`.
 
 ```sh
 java --class-path . src/main/java/io/github/giannisdal/mmove/MMove.java
@@ -50,7 +50,7 @@ When running from source on macOS, grant Accessibility access to the terminal ap
 
 ## Build a native app
 
-Build on the target operating system with **JDK 22 or later**. Both builds bundle a Java runtime.
+Build on the target operating system with **JDK 11 or later**. Both builds bundle a Java runtime.
 
 ### macOS app bundle
 
@@ -67,7 +67,7 @@ Run these commands in Command Prompt from the project directory.
 
 ```bat
 mkdir build\in
-javac --release 22 -d build\classes --source-path src\main\java src\main\java\io\github\giannisdal\mmove\MMove.java
+javac --release 11 -d build\classes --source-path src\main\java src\main\java\io\github\giannisdal\mmove\MMove.java
 jar cfm build\in\mmove.jar manifest.txt -C build\classes . -C . assets
 jpackage --type app-image --name mMove --input build\in --main-jar mmove.jar --main-class io.github.giannisdal.mmove.MMove --icon assets\logo.ico --dest dist --add-modules java.desktop
 ```

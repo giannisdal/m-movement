@@ -7,7 +7,6 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.event.MouseEvent;
-import java.io.Serial;
 import javax.swing.JComponent;
 
 import static io.github.giannisdal.mmove.UiStyle.ACCENT;
@@ -16,7 +15,6 @@ import static io.github.giannisdal.mmove.UiStyle.createGraphics;
 import static io.github.giannisdal.mmove.UiStyle.drawCenteredText;
 
 final class MovementButton extends JComponent {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     private static final Color RED = new Color(0xFF5C6C);

@@ -1,14 +1,13 @@
 package io.github.giannisdal.mmove;
 
-import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.imageio.ImageIO;
 
 final class AppIcon {
@@ -19,7 +18,7 @@ final class AppIcon {
         BufferedImage logo = load();
         if (logo == null) throw new IOException("Could not load assets/logo.png");
 
-        Path iconset = Files.createDirectories(Path.of(args[0]));
+        Path iconset = Files.createDirectories(Paths.get(args[0]));
         for (int size : new int[] {16, 32, 128, 256, 512}) {
             String name = "icon_" + size + "x" + size;
             writeIcon(logo, size, iconset.resolve(name + ".png"));
@@ -45,28 +44,26 @@ final class AppIcon {
 
         try {
             BufferedImage source = ImageIO.read(resource);
-            return source == null ? null : cropLogo(source);
-        } catch (IOException _) {
+            return source;
+        } catch (IOException ignored) {
             return null;
         }
     }
 
-    private static BufferedImage cropLogo(BufferedImage source) {
-        // Bounds of the purple badge within logo.png.
-        int left = Math.round(source.getWidth() * 0.168f);
-        int top = Math.round(source.getHeight() * 0.177f);
-        int width = Math.round(source.getWidth() * 0.656f);
-        int height = Math.round(source.getHeight() * 0.652f);
-        BufferedImage cropped = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = cropped.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        float badgeWidth = (float) width;
-        float badgeHeight = (float) height;
-        graphics.fill(new RoundRectangle2D.Float(0, 0, badgeWidth, badgeHeight,
-                badgeWidth * 0.56f, badgeHeight * 0.56f));
-        graphics.setComposite(AlphaComposite.SrcIn);
-        graphics.drawImage(source, -left, -top, null);
-        graphics.dispose();
-        return cropped;
+    /** Downscales in halving steps so large artwork stays sharp at small sizes. */
+    static BufferedImage scaled(BufferedImage source, int size) {
+        if (source == null) return null;
+        BufferedImage current = source;
+        while (current.getWidth() > size) {
+            int next = Math.max(size, current.getWidth() / 2);
+            BufferedImage step = new BufferedImage(next, next, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D graphics = step.createGraphics();
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.drawImage(current, 0, 0, next, next, null);
+            graphics.dispose();
+            current = step;
+        }
+        return current;
     }
 }
