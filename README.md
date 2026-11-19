@@ -19,7 +19,7 @@ Arguments are `[pixels] [intervalSeconds]` and default to 200 pixels every 20 se
 
 ```
 mkdir build\in
-javac --release 22 -d build\classes src\main\java\io\github\giannisdal\mmove\MMove.java
+javac --release 22 -d build\classes --source-path src\main\java src\main\java\io\github\giannisdal\mmove\MMove.java
 jar cfm build\in\mmove.jar manifest.txt -C build\classes . -C . assets
 jpackage --type app-image --name mMove --input build\in --main-jar mmove.jar --main-class io.github.giannisdal.mmove.MMove --icon assets\logo.ico --dest dist --add-modules java.desktop
 ```
