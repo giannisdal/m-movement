@@ -1,3 +1,4 @@
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -12,6 +13,8 @@ import java.awt.RenderingHints;
 import java.awt.Robot;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -99,13 +102,29 @@ public class MMove {
         return Math.max(lo, Math.min(hi, v));
     }
 
+    private static BufferedImage cropLogo(BufferedImage source) {
+        // Bounds of the purple badge within logo.png.
+        int left = Math.round(source.getWidth() * 0.168f);
+        int top = Math.round(source.getHeight() * 0.177f);
+        int width = Math.round(source.getWidth() * 0.656f);
+        int height = Math.round(source.getHeight() * 0.652f);
+        BufferedImage cropped = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = cropped.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.fill(new RoundRectangle2D.Float(0, 0, width, height, width * 0.56f, height * 0.56f));
+        graphics.setComposite(AlphaComposite.SrcIn);
+        graphics.drawImage(source, -left, -top, null);
+        graphics.dispose();
+        return cropped;
+    }
+
     static void buildUi() {
         frame = new JFrame("mMove");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
         Image logo = null;
         try {
-            logo = ImageIO.read(MMove.class.getResource("/logo.png"));
+            logo = cropLogo(ImageIO.read(MMove.class.getResource("/logo.png")));
             frame.setIconImage(logo);
         } catch (Exception ignored) {
         }

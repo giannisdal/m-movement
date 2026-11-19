@@ -19,7 +19,7 @@ Arguments: `[pixels] [intervalSeconds]`. On macOS, allow Accessibility for your 
 
 ```
 javac -d build\classes MMove.java
-jar cfm build\in\mmove.jar manifest.txt -C build\classes .
+jar cfm build\in\mmove.jar manifest.txt -C build\classes . logo.png
 jpackage --type app-image --name mMove --input build\in --main-jar mmove.jar --main-class MMove --icon logo.ico --dest dist --add-modules java.desktop
 ```
 
