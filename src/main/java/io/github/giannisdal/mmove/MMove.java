@@ -1,19 +1,14 @@
 package io.github.giannisdal.mmove;
 
-import java.awt.AlphaComposite;
 import java.awt.Frame;
-import java.awt.Graphics2D;
 import java.awt.MouseInfo;
 import java.awt.Point;
-import java.awt.RenderingHints;
 import java.awt.Robot;
-import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.URL;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -21,7 +16,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.imageio.ImageIO;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -31,8 +25,6 @@ import javax.swing.WindowConstants;
  * No admin rights needed. Requires Java 22+.
  */
 public class MMove {
-    private static final String LOGO_RESOURCE = "/assets/logo.png";
-
     private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "mover");
         t.setDaemon(true);
@@ -94,7 +86,7 @@ public class MMove {
     }
 
     private static void buildUi() {
-        BufferedImage logo = loadLogo();
+        BufferedImage logo = AppIcon.load();
         root = new MainPanel(logo);
 
         frame = new JFrame("mMove");
@@ -105,37 +97,6 @@ public class MMove {
         frame.setResizable(false);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-    }
-
-    private static BufferedImage loadLogo() {
-        URL resource = MMove.class.getResource(LOGO_RESOURCE);
-        if (resource == null) return null;
-
-        try {
-            BufferedImage source = ImageIO.read(resource);
-            return source == null ? null : cropLogo(source);
-        } catch (IOException _) {
-            return null;
-        }
-    }
-
-    private static BufferedImage cropLogo(BufferedImage source) {
-        // Bounds of the purple badge within logo.png.
-        int left = Math.round(source.getWidth() * 0.168f);
-        int top = Math.round(source.getHeight() * 0.177f);
-        int width = Math.round(source.getWidth() * 0.656f);
-        int height = Math.round(source.getHeight() * 0.652f);
-        BufferedImage cropped = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D graphics = cropped.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        float badgeWidth = (float) width;
-        float badgeHeight = (float) height;
-        graphics.fill(new RoundRectangle2D.Float(0, 0, badgeWidth, badgeHeight,
-                badgeWidth * 0.56f, badgeHeight * 0.56f));
-        graphics.setComposite(AlphaComposite.SrcIn);
-        graphics.drawImage(source, -left, -top, null);
-        graphics.dispose();
-        return cropped;
     }
 
     static int distance() {
