@@ -1,9 +1,12 @@
+package io.github.giannisdal.mmove;
+
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.MouseInfo;
@@ -15,11 +18,13 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.Serial;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URL;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -31,12 +36,11 @@ import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
 
 /**
  * mMove - keeps the machine "active" (Teams green, no lock) by moving the real cursor.
- * No admin rights needed. Requires Java 11+.
- *
- * Usage: java MMove.java [pixels] [intervalSeconds]   (initial slider values)
+ * No admin rights needed. Requires Java 22+.
  */
 public class MMove {
     private static final Color BG = new Color(0x14161B);
@@ -65,8 +69,8 @@ public class MMove {
 
     public static void main(String[] args) {
         if (!claimSingleInstance()) return;
-        if (args.length > 0) pixels = clamp(Integer.parseInt(args[0]), 1, 400);
-        if (args.length > 1) interval = clamp(Integer.parseInt(args[1]), 1, 120);
+        if (args.length > 0) pixels = Math.clamp(Integer.parseInt(args[0]), 1, 400);
+        if (args.length > 1) interval = Math.clamp(Integer.parseInt(args[1]), 1, 120);
         SwingUtilities.invokeLater(MMove::buildUi);
     }
 
@@ -78,7 +82,7 @@ public class MMove {
             listener.setDaemon(true);
             listener.start();
             return true;
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             requestExistingWindowFocus();
             return false;
         }
@@ -90,7 +94,7 @@ public class MMove {
                 listener.accept().close();
                 SwingUtilities.invokeLater(MMove::focusWindow);
             }
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // The listener has closed.
         }
     }
@@ -98,14 +102,14 @@ public class MMove {
     private static void requestExistingWindowFocus() {
         try {
             new Socket(InetAddress.getLoopbackAddress(), 47653).close();
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             // The existing instance may have already exited.
         }
     }
 
     private static void focusWindow() {
         if (frame == null) return;
-        frame.setExtendedState(JFrame.NORMAL);
+        frame.setExtendedState(Frame.NORMAL);
         frame.toFront();
         frame.requestFocus();
     }
@@ -115,7 +119,7 @@ public class MMove {
         root = new MainPanel(logo);
 
         frame = new JFrame("mMove");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         if (logo != null) frame.setIconImage(logo);
         frame.setContentPane(root);
         frame.pack();
@@ -131,7 +135,7 @@ public class MMove {
         try {
             BufferedImage source = ImageIO.read(resource);
             return source == null ? null : cropLogo(source);
-        } catch (IOException ignored) {
+        } catch (IOException _) {
             return null;
         }
     }
@@ -145,7 +149,10 @@ public class MMove {
         BufferedImage cropped = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = cropped.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        graphics.fill(new RoundRectangle2D.Float(0, 0, width, height, width * 0.56f, height * 0.56f));
+        float badgeWidth = (float) width;
+        float badgeHeight = (float) height;
+        graphics.fill(new RoundRectangle2D.Float(0, 0, badgeWidth, badgeHeight,
+                badgeWidth * 0.56f, badgeHeight * 0.56f));
         graphics.setComposite(AlphaComposite.SrcIn);
         graphics.drawImage(source, -left, -top, null);
         graphics.dispose();
@@ -168,15 +175,6 @@ public class MMove {
 
     private static boolean running() {
         return job != null && !job.isCancelled();
-    }
-
-    private static void toggle() {
-        if (running()) {
-            stopMoving();
-        } else {
-            scheduleMovement();
-        }
-        root.repaint();
     }
 
     private static void stopMoving() {
@@ -210,14 +208,15 @@ public class MMove {
     private static void moveOnce(int distance, long version) {
         try {
             move(new Robot(), distance);
-            String time = LocalTime.now().truncatedTo(ChronoUnit.SECONDS).toString();
+            String time = LocalTime.now(ZoneId.systemDefault()).truncatedTo(ChronoUnit.SECONDS).toString();
             SwingUtilities.invokeLater(() -> {
                 if (running() && version == scheduleVersion) {
                     lastMove = time;
                     root.repaint();
                 }
             });
-        } catch (Exception ignored) {
+        } catch (Exception _) {
+            // Leave the schedule active so the next move can retry if Robot is unavailable.
         }
     }
 
@@ -228,24 +227,23 @@ public class MMove {
     }
 
     private static void smoothMove(Robot robot, int startX, int endX, int y) {
-        int steps = Math.min(Math.max(1, Math.abs(endX - startX)), 50);
+        int steps = Math.clamp(Math.abs(endX - startX), 1, 50);
         for (int step = 1; step <= steps; step++) {
             robot.mouseMove(startX + (endX - startX) * step / steps, y);
             robot.delay(10);
         }
     }
 
-    private static int clamp(int value, int min, int max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
     private static final class MainPanel extends JPanel {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private static final int CARD_X = 24;
         private static final int CARD_WIDTH = 312;
         private static final int DISTANCE_Y = 176;
         private static final int INTERVAL_Y = 262;
 
-        private final BufferedImage logo;
+        private final transient BufferedImage logo;
 
         private MainPanel(BufferedImage logo) {
             super(null);
@@ -311,6 +309,9 @@ public class MMove {
     }
 
     private static final class MovementButton extends JComponent {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private MovementButton() {
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             addMouseListener(new MouseAdapter() {
@@ -319,6 +320,15 @@ public class MMove {
                     toggle();
                 }
             });
+        }
+
+        private void toggle() {
+            if (running()) {
+                stopMoving();
+            } else {
+                scheduleMovement();
+            }
+            root.repaint();
         }
 
         @Override
@@ -336,11 +346,14 @@ public class MMove {
 
     /** Flat custom slider. */
     private static final class Slider extends JComponent {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private static final int TRACK_PADDING = 10;
 
         private final int min;
         private final int max;
-        private final IntConsumer onChange;
+        private final transient IntConsumer onChange;
         private int value;
 
         private Slider(int min, int max, int value, IntConsumer onChange) {
@@ -366,7 +379,7 @@ public class MMove {
 
         private void updateValue(int mouseX) {
             double fraction = (mouseX - TRACK_PADDING) / (double) trackWidth();
-            value = clamp((int) Math.round(min + fraction * (max - min)), min, max);
+            value = Math.clamp(Math.round(min + fraction * (max - min)), min, max);
             onChange.accept(value);
             repaint();
         }
