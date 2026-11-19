@@ -6,7 +6,6 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.io.Serial;
 import javax.swing.JPanel;
 
 import static io.github.giannisdal.mmove.UiStyle.FONT;
@@ -14,7 +13,6 @@ import static io.github.giannisdal.mmove.UiStyle.createGraphics;
 import static io.github.giannisdal.mmove.UiStyle.drawCenteredText;
 
 final class MainPanel extends JPanel {
-    @Serial
     private static final long serialVersionUID = 1L;
 
     private static final int CARD_X = 24;

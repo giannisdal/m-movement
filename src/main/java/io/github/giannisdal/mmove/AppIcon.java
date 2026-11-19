@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.imageio.ImageIO;
 
 final class AppIcon {
@@ -19,7 +20,7 @@ final class AppIcon {
         BufferedImage logo = load();
         if (logo == null) throw new IOException("Could not load assets/logo.png");
 
-        Path iconset = Files.createDirectories(Path.of(args[0]));
+        Path iconset = Files.createDirectories(Paths.get(args[0]));
         for (int size : new int[] {16, 32, 128, 256, 512}) {
             String name = "icon_" + size + "x" + size;
             writeIcon(logo, size, iconset.resolve(name + ".png"));
@@ -46,7 +47,7 @@ final class AppIcon {
         try {
             BufferedImage source = ImageIO.read(resource);
             return source == null ? null : cropLogo(source);
-        } catch (IOException _) {
+        } catch (IOException ignored) {
             return null;
         }
     }
