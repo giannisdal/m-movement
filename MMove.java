@@ -6,7 +6,6 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Image;
 import java.awt.MouseInfo;
 import java.awt.Point;
 import java.awt.RenderingHints;
@@ -15,9 +14,11 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URL;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.Executors;
@@ -38,15 +39,16 @@ import javax.swing.SwingUtilities;
  * Usage: java MMove.java [pixels] [intervalSeconds]   (initial slider values)
  */
 public class MMove {
-    static final Color BG = new Color(0x14161B);
-    static final Color CARD = new Color(0x1E2128);
-    static final Color TRACK = new Color(0x333844);
-    static final Color ACCENT = new Color(0x6C8CFF);
-    static final Color GREEN = new Color(0x3DDC97);
-    static final Color RED = new Color(0xFF5C6C);
-    static final Color TEXT = new Color(0xE8EAF0);
-    static final Color MUTED = new Color(0x8A91A3);
-    static final String FONT = "Segoe UI";
+    private static final Color BG = new Color(0x14161B);
+    private static final Color CARD = new Color(0x1E2128);
+    private static final Color TRACK = new Color(0x333844);
+    private static final Color ACCENT = new Color(0x6C8CFF);
+    private static final Color GREEN = new Color(0x3DDC97);
+    private static final Color RED = new Color(0xFF5C6C);
+    private static final Color TEXT = new Color(0xE8EAF0);
+    private static final Color MUTED = new Color(0x8A91A3);
+    private static final String FONT = "Segoe UI";
+    private static final String LOGO_RESOURCE = "/assets/logo.png";
 
     private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "mover");
@@ -54,10 +56,11 @@ public class MMove {
         return t;
     });
     private static ScheduledFuture<?> job;
+    private static long scheduleVersion;
     private static int pixels = 200;
     private static int interval = 20;
-    private static String lastMove = null;
-    private static JComponent root;
+    private static String lastMove;
+    private static MainPanel root;
     private static JFrame frame;
 
     public static void main(String[] args) {
@@ -68,38 +71,69 @@ public class MMove {
     }
 
     /** Binds a loopback port as an instance lock; a second launch just focuses the first window. */
-    static boolean claimSingleInstance() {
+    private static boolean claimSingleInstance() {
         try {
             ServerSocket server = new ServerSocket(47653, 1, InetAddress.getLoopbackAddress());
-            Thread t = new Thread(() -> {
-                while (true) {
-                    try (Socket s = server.accept()) {
-                        SwingUtilities.invokeLater(() -> {
-                            if (frame != null) {
-                                frame.setExtendedState(JFrame.NORMAL);
-                                frame.toFront();
-                                frame.requestFocus();
-                            }
-                        });
-                    } catch (Exception e) {
-                        return;
-                    }
-                }
-            }, "single-instance");
-            t.setDaemon(true);
-            t.start();
+            Thread listener = new Thread(() -> listenForFocusRequests(server), "single-instance");
+            listener.setDaemon(true);
+            listener.start();
             return true;
-        } catch (Exception e) {
-            try (Socket s = new Socket(InetAddress.getLoopbackAddress(), 47653)) {
-                // connecting is the signal
-            } catch (Exception ignored) {
-            }
+        } catch (IOException ignored) {
+            requestExistingWindowFocus();
             return false;
         }
     }
 
-    static int clamp(int v, int lo, int hi) {
-        return Math.max(lo, Math.min(hi, v));
+    private static void listenForFocusRequests(ServerSocket server) {
+        try (ServerSocket listener = server) {
+            while (true) {
+                listener.accept().close();
+                SwingUtilities.invokeLater(MMove::focusWindow);
+            }
+        } catch (IOException ignored) {
+            // The listener has closed.
+        }
+    }
+
+    private static void requestExistingWindowFocus() {
+        try {
+            new Socket(InetAddress.getLoopbackAddress(), 47653).close();
+        } catch (IOException ignored) {
+            // The existing instance may have already exited.
+        }
+    }
+
+    private static void focusWindow() {
+        if (frame == null) return;
+        frame.setExtendedState(JFrame.NORMAL);
+        frame.toFront();
+        frame.requestFocus();
+    }
+
+    private static void buildUi() {
+        BufferedImage logo = loadLogo();
+        root = new MainPanel(logo);
+
+        frame = new JFrame("mMove");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        if (logo != null) frame.setIconImage(logo);
+        frame.setContentPane(root);
+        frame.pack();
+        frame.setResizable(false);
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+    }
+
+    private static BufferedImage loadLogo() {
+        URL resource = MMove.class.getResource(LOGO_RESOURCE);
+        if (resource == null) return null;
+
+        try {
+            BufferedImage source = ImageIO.read(resource);
+            return source == null ? null : cropLogo(source);
+        } catch (IOException ignored) {
+            return null;
+        }
     }
 
     private static BufferedImage cropLogo(BufferedImage source) {
@@ -118,108 +152,7 @@ public class MMove {
         return cropped;
     }
 
-    static void buildUi() {
-        frame = new JFrame("mMove");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-
-        Image logo = null;
-        try {
-            logo = cropLogo(ImageIO.read(MMove.class.getResource("/logo.png")));
-            frame.setIconImage(logo);
-        } catch (Exception ignored) {
-        }
-        final Image logoImg = logo;
-
-        Slider pxSlider = new Slider(1, 400, pixels, v -> {
-            pixels = v;
-            reschedule();
-        });
-        Slider intSlider = new Slider(1, 120, interval, v -> {
-            interval = v;
-            reschedule();
-        });
-
-        // Absolute layout inside a fixed-size panel so nothing shifts.
-        JPanel panel = new JPanel(null) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = hq(g);
-                g2.setColor(BG);
-                g2.fillRect(0, 0, getWidth(), getHeight());
-
-                if (logoImg != null) g2.drawImage(logoImg, 132, 24, 96, 96, null);
-                g2.setColor(TEXT);
-                g2.setFont(new Font(FONT, Font.BOLD, 22));
-                center(g2, "mMove", 150);
-
-                card(g2, 24, 176, "Distance", pixels + " px");
-                card(g2, 24, 262, "Interval", interval + " s");
-
-                boolean on = running();
-                g2.setColor(on ? GREEN : MUTED);
-                g2.fillOval(36, 454, 10, 10);
-                g2.setColor(MUTED);
-                g2.setFont(new Font(FONT, Font.PLAIN, 12));
-                g2.drawString(on ? (lastMove == null ? "Running" : "Running - last move " + lastMove) : "Stopped", 54, 464);
-            }
-
-            void card(Graphics2D g2, int x, int y, String title, String value) {
-                g2.setColor(CARD);
-                g2.fillRoundRect(x, y, 312, 76, 18, 18);
-                g2.setColor(MUTED);
-                g2.setFont(new Font(FONT, Font.PLAIN, 12));
-                g2.drawString(title, x + 16, y + 24);
-                g2.setColor(TEXT);
-                g2.setFont(new Font(FONT, Font.BOLD, 13));
-                int w = g2.getFontMetrics().stringWidth(value);
-                g2.drawString(value, x + 312 - 16 - w, y + 24);
-            }
-
-            void center(Graphics2D g2, String s, int y) {
-                g2.drawString(s, (getWidth() - g2.getFontMetrics().stringWidth(s)) / 2, y);
-            }
-        };
-        root = panel;
-        panel.setPreferredSize(new Dimension(360, 490));
-
-        pxSlider.setBounds(40, 216, 280, 26);
-        intSlider.setBounds(40, 302, 280, 26);
-        panel.add(pxSlider);
-        panel.add(intSlider);
-
-        JComponent button = new JComponent() {
-            {
-                setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                addMouseListener(new MouseAdapter() {
-                    @Override
-                    public void mouseClicked(MouseEvent e) {
-                        toggle();
-                    }
-                });
-            }
-
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = hq(g);
-                g2.setColor(running() ? RED : ACCENT);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 26, 26);
-                g2.setColor(Color.WHITE);
-                g2.setFont(new Font(FONT, Font.BOLD, 14));
-                String s = running() ? "Stop" : "Start";
-                g2.drawString(s, (getWidth() - g2.getFontMetrics().stringWidth(s)) / 2, 31);
-            }
-        };
-        button.setBounds(24, 372, 312, 48);
-        panel.add(button);
-
-        frame.setContentPane(panel);
-        frame.pack();
-        frame.setResizable(false);
-        frame.setLocationRelativeTo(null);
-        frame.setVisible(true);
-    }
-
-    static Graphics2D hq(Graphics g) {
+    private static Graphics2D createGraphics(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -228,105 +161,235 @@ public class MMove {
         return g2;
     }
 
-    static boolean running() {
+    private static void drawCenteredText(Graphics2D graphics, String text, int width, int baseline) {
+        int textWidth = graphics.getFontMetrics().stringWidth(text);
+        graphics.drawString(text, (width - textWidth) / 2, baseline);
+    }
+
+    private static boolean running() {
         return job != null && !job.isCancelled();
     }
 
-    static void toggle() {
+    private static void toggle() {
         if (running()) {
-            job.cancel(false);
-            job = null;
-            lastMove = null;
+            stopMoving();
         } else {
-            reschedule(true);
+            scheduleMovement();
         }
         root.repaint();
     }
 
-    static void reschedule() {
-        reschedule(false);
+    private static void stopMoving() {
+        job.cancel(false);
+        job = null;
+        lastMove = null;
     }
 
-    static void reschedule(boolean force) {
-        if (!force && !running()) {
-            root.repaint();
-            return;
-        }
+    private static void updateDistance(int distance) {
+        pixels = distance;
+        refreshSettings();
+    }
+
+    private static void updateInterval(int seconds) {
+        interval = seconds;
+        refreshSettings();
+    }
+
+    private static void refreshSettings() {
+        if (running()) scheduleMovement();
+        root.repaint();
+    }
+
+    private static void scheduleMovement() {
         if (job != null) job.cancel(false);
-        job = scheduler.scheduleWithFixedDelay(() -> {
-            try {
-                move(new Robot(), pixels);
-                lastMove = LocalTime.now().truncatedTo(ChronoUnit.SECONDS).toString();
-                SwingUtilities.invokeLater(() -> root.repaint());
-            } catch (Exception ignored) {
-            }
-        }, 0, interval, TimeUnit.SECONDS);
-        root.repaint();
+        long version = ++scheduleVersion;
+        int distance = pixels;
+        job = scheduler.scheduleWithFixedDelay(() -> moveOnce(distance, version), 0, interval, TimeUnit.SECONDS);
     }
 
-    static void move(Robot robot, int px) {
-        Point p = MouseInfo.getPointerInfo().getLocation();
-        smoothMove(robot, p.x, p.y, p.x + px, p.y);
-        smoothMove(robot, p.x + px, p.y, p.x, p.y);
+    private static void moveOnce(int distance, long version) {
+        try {
+            move(new Robot(), distance);
+            String time = LocalTime.now().truncatedTo(ChronoUnit.SECONDS).toString();
+            SwingUtilities.invokeLater(() -> {
+                if (running() && version == scheduleVersion) {
+                    lastMove = time;
+                    root.repaint();
+                }
+            });
+        } catch (Exception ignored) {
+        }
     }
 
-    static void smoothMove(Robot r, int x1, int y1, int x2, int y2) {
-        int steps = Math.min(Math.max(1, Math.abs(x2 - x1)), 50);
-        for (int i = 1; i <= steps; i++) {
-            r.mouseMove(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps);
-            r.delay(10);
+    private static void move(Robot robot, int distance) {
+        Point pointer = MouseInfo.getPointerInfo().getLocation();
+        smoothMove(robot, pointer.x, pointer.x + distance, pointer.y);
+        smoothMove(robot, pointer.x + distance, pointer.x, pointer.y);
+    }
+
+    private static void smoothMove(Robot robot, int startX, int endX, int y) {
+        int steps = Math.min(Math.max(1, Math.abs(endX - startX)), 50);
+        for (int step = 1; step <= steps; step++) {
+            robot.mouseMove(startX + (endX - startX) * step / steps, y);
+            robot.delay(10);
+        }
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static final class MainPanel extends JPanel {
+        private static final int CARD_X = 24;
+        private static final int CARD_WIDTH = 312;
+        private static final int DISTANCE_Y = 176;
+        private static final int INTERVAL_Y = 262;
+
+        private final BufferedImage logo;
+
+        private MainPanel(BufferedImage logo) {
+            super(null);
+            this.logo = logo;
+            setPreferredSize(new Dimension(360, 490));
+
+            addSlider(new Slider(1, 400, pixels, MMove::updateDistance), DISTANCE_Y);
+            addSlider(new Slider(1, 120, interval, MMove::updateInterval), INTERVAL_Y);
+
+            MovementButton button = new MovementButton();
+            button.setBounds(CARD_X, 372, CARD_WIDTH, 48);
+            add(button);
+        }
+
+        private void addSlider(Slider slider, int cardY) {
+            slider.setBounds(40, cardY + 40, 280, 26);
+            add(slider);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D graphics = createGraphics(g);
+            graphics.setColor(BG);
+            graphics.fillRect(0, 0, getWidth(), getHeight());
+            paintHeader(graphics);
+            paintCard(graphics, DISTANCE_Y, "Distance", pixels + " px");
+            paintCard(graphics, INTERVAL_Y, "Interval", interval + " s");
+            paintStatus(graphics);
+            graphics.dispose();
+        }
+
+        private void paintHeader(Graphics2D graphics) {
+            if (logo != null) graphics.drawImage(logo, 132, 24, 96, 96, null);
+            graphics.setColor(TEXT);
+            graphics.setFont(new Font(FONT, Font.BOLD, 22));
+            drawCenteredText(graphics, "mMove", getWidth(), 150);
+        }
+
+        private void paintCard(Graphics2D graphics, int y, String title, String value) {
+            graphics.setColor(CARD);
+            graphics.fillRoundRect(CARD_X, y, CARD_WIDTH, 76, 18, 18);
+            graphics.setColor(MUTED);
+            graphics.setFont(new Font(FONT, Font.PLAIN, 12));
+            graphics.drawString(title, CARD_X + 16, y + 24);
+
+            graphics.setColor(TEXT);
+            graphics.setFont(new Font(FONT, Font.BOLD, 13));
+            int valueWidth = graphics.getFontMetrics().stringWidth(value);
+            graphics.drawString(value, CARD_X + CARD_WIDTH - 16 - valueWidth, y + 24);
+        }
+
+        private void paintStatus(Graphics2D graphics) {
+            boolean active = running();
+            graphics.setColor(active ? GREEN : MUTED);
+            graphics.fillOval(36, 454, 10, 10);
+            graphics.setColor(MUTED);
+            graphics.setFont(new Font(FONT, Font.PLAIN, 12));
+
+            String status = active ? "Running" : "Stopped";
+            if (active && lastMove != null) status += " - last move " + lastMove;
+            graphics.drawString(status, 54, 464);
+        }
+    }
+
+    private static final class MovementButton extends JComponent {
+        private MovementButton() {
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    toggle();
+                }
+            });
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D graphics = createGraphics(g);
+            boolean active = running();
+            graphics.setColor(active ? RED : ACCENT);
+            graphics.fillRoundRect(0, 0, getWidth(), getHeight(), 26, 26);
+            graphics.setColor(Color.WHITE);
+            graphics.setFont(new Font(FONT, Font.BOLD, 14));
+            drawCenteredText(graphics, active ? "Stop" : "Start", getWidth(), 31);
+            graphics.dispose();
         }
     }
 
     /** Flat custom slider. */
-    static class Slider extends JComponent {
-        final int min, max;
-        int value;
-        final IntConsumer onChange;
+    private static final class Slider extends JComponent {
+        private static final int TRACK_PADDING = 10;
 
-        Slider(int min, int max, int value, IntConsumer onChange) {
+        private final int min;
+        private final int max;
+        private final IntConsumer onChange;
+        private int value;
+
+        private Slider(int min, int max, int value, IntConsumer onChange) {
             this.min = min;
             this.max = max;
             this.value = value;
             this.onChange = onChange;
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            MouseAdapter m = new MouseAdapter() {
+            MouseAdapter dragHandler = new MouseAdapter() {
                 @Override
                 public void mousePressed(MouseEvent e) {
-                    set(e.getX());
+                    updateValue(e.getX());
                 }
 
                 @Override
                 public void mouseDragged(MouseEvent e) {
-                    set(e.getX());
+                    updateValue(e.getX());
                 }
             };
-            addMouseListener(m);
-            addMouseMotionListener(m);
+            addMouseListener(dragHandler);
+            addMouseMotionListener(dragHandler);
         }
 
-        void set(int x) {
-            int pad = 10;
-            double f = (x - pad) / (double) (getWidth() - 2 * pad);
-            value = clamp((int) Math.round(min + f * (max - min)), min, max);
+        private void updateValue(int mouseX) {
+            double fraction = (mouseX - TRACK_PADDING) / (double) trackWidth();
+            value = clamp((int) Math.round(min + fraction * (max - min)), min, max);
             onChange.accept(value);
             repaint();
-            if (getParent() != null) getParent().repaint();
+        }
+
+        private int trackWidth() {
+            return getWidth() - 2 * TRACK_PADDING;
         }
 
         @Override
         protected void paintComponent(Graphics g) {
-            Graphics2D g2 = hq(g);
-            int pad = 10, cy = getHeight() / 2;
-            int w = getWidth() - 2 * pad;
-            int x = pad + (int) ((value - min) / (double) (max - min) * w);
-            g2.setStroke(new BasicStroke(6, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2.setColor(TRACK);
-            g2.drawLine(pad, cy, pad + w, cy);
-            g2.setColor(ACCENT);
-            g2.drawLine(pad, cy, x, cy);
-            g2.setColor(Color.WHITE);
-            g2.fillOval(x - 9, cy - 9, 18, 18);
+            Graphics2D graphics = createGraphics(g);
+            int centerY = getHeight() / 2;
+            int width = trackWidth();
+            int thumbX = TRACK_PADDING + (int) ((value - min) / (double) (max - min) * width);
+
+            graphics.setStroke(new BasicStroke(6, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            graphics.setColor(TRACK);
+            graphics.drawLine(TRACK_PADDING, centerY, TRACK_PADDING + width, centerY);
+            graphics.setColor(ACCENT);
+            graphics.drawLine(TRACK_PADDING, centerY, thumbX, centerY);
+            graphics.setColor(Color.WHITE);
+            graphics.fillOval(thumbX - 9, centerY - 9, 18, 18);
+            graphics.dispose();
         }
     }
 }
